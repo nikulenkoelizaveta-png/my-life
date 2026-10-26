@@ -303,7 +303,7 @@ function showLogin(msg){
 async function start(session){
   uidSb=session.user.id;mode='cloud';menuEl().hidden=false;setStatus('Открываю ваши записи…');
   try{await loadAll()}catch(e){setStatus('Не удалось открыть записи. Проверьте интернет и обновите страницу.',true);$('#view').innerHTML='<p class="muted">Записи не загрузились.</p>';return}
-  ready=true;setStatus('Сохранено');renderTools();render();
+  ready=true;setStatus('Сохранено');renderTools();render();loadRates();
 }
 function renderTools(){
   const t=$('#tools');t.hidden=false;
@@ -528,10 +528,19 @@ function goalPanel(w){
   const rows=C.map(c=>{const rate=c[3],t=c[4],cur=w[c[0]]||0,ok=rate>0,hr=ok?Math.min(cur*rate,t):0,pct=ok?Math.min(100,Math.round(cur*rate/t*100)):0,need=ok?t/rate:null,left=ok?Math.max(0,need-cur):null;tot+=t;have+=hr;
     return '<div class="goalrow"><div class="hd"><span>'+c[1]+' <span class="small muted">цель '+fmt(t)+' ₽'+(c[0]!=='rub'&&ok?' ≈ '+fmt(Math.ceil(need))+' '+c[2]+' по курсу '+fmt(rate):'')+'</span></span><b>'+(ok?pct+'%':'—')+'</b></div>'+
       '<div class="meter" role="img" aria-label="'+c[1]+': '+pct+'% цели"><i style="width:'+pct+'%"></i></div>'+
-      '<span class="small muted">'+(ok?'есть '+fmt(cur)+' '+c[2]+', осталось '+(left>0?fmt(Math.ceil(left))+' '+c[2]+(c[0]!=='rub'?' (≈ '+fmt(Math.round(left*rate))+' ₽)':''):'0, цель достигнута'):'укажите курс в форме ниже, чтобы посчитать')+'</span></div>'}).join('');
+      '<span class="small muted">'+(ok?'есть '+fmt(cur)+' '+c[2]+', осталось '+(left>0?fmt(Math.ceil(left))+' '+c[2]+(c[0]!=='rub'?' (≈ '+fmt(Math.round(left*rate))+' ₽)':''):'0, цель достигнута'):'курс пока неизвестен')+'</span></div>'}).join('');
   const tp=tot?Math.round(have/tot*100):0;
   return '<section class="panel"><h3>Цель по накоплениям</h3><div class="stats"><div class="stat"><b>'+fmt(Math.max(0,Math.round(tot-have)))+' ₽</b><span>осталось до цели</span></div><div class="stat"><b>'+tp+'%</b><span>накоплено из '+fmt(tot)+' ₽</span></div></div>'+
     '<div class="goalrow"><div class="hd"><span>Вся цель</span><b>'+tp+'%</b></div><div class="meter" style="height:16px" role="img" aria-label="Вся цель: '+tp+'%"><i style="width:'+tp+'%"></i></div></div>'+rows+'</section>';
+}
+let rateInfo={date:null};
+async function loadRates(){
+  try{const r=await fetch('https://www.cbr-xml-daily.ru/daily_json.js',{cache:'no-store'});const j=await r.json(),V=j.Valute,w=S.wallet;
+    const nr={rUsd:V.USD.Value/V.USD.Nominal,rEur:V.EUR.Value/V.EUR.Nominal,rCny:V.CNY.Value/V.CNY.Nominal};
+    rateInfo.date=String(j.Date).slice(0,10);
+    if(Object.keys(nr).some(k=>Math.abs((w[k]||0)-nr[k])>0.005)){Object.keys(nr).forEach(k=>{w[k]=Math.round(nr[k]*100)/100});persist('wallet')}
+    if(tab==='money')render();
+  }catch(e){}
 }
 const wf=(id,l,v,step)=>'<label class="f">'+l+'<input type="number" inputmode="decimal" step="'+(step||'0.01')+'" min="0" id="w-'+id+'" name="'+id+'" value="'+(v||'')+'" placeholder="0"></label>';
 function vMoney(){
@@ -546,15 +555,15 @@ function vSave(){
     goalPanel(w)+
     '<form data-form="wallet"><section class="panel"><h3>Изменить накопления</h3><div class="row">'+wf('rub','Рубли',w.rub)+wf('usd','Доллары',w.usd)+wf('eur','Евро',w.eur)+wf('cny','Юани',w.cny)+'</div>'+
     '<h3>Цель, в рублях</h3><div class="row">'+wf('gRub','В рублях',w.gRub)+wf('gUsd','В долларах',w.gUsd)+wf('gEur','В евро',w.gEur)+wf('gCny','В юанях',w.gCny)+'</div>'+
-    '<h3>Курс для пересчёта цели</h3><div class="row">'+wf('rUsd','1 $ в ₽',w.rUsd)+wf('rEur','1 € в ₽',w.rEur)+wf('rCny','1 ¥ в ₽',w.rCny)+'</div><p class="small muted">Цель задана в рублях, поэтому количество валюты зависит от курса. Обновляйте курс, когда он заметно меняется.</p><div><button class="btn primary">Сохранить</button></div></section></form>';
+    '<p class="small muted">'+(rateInfo.date?'Валюта пересчитывается в рубли по курсу ЦБ на '+human(rateInfo.date)+'.':'Курс ЦБ сейчас не загрузился, поэтому валюта пересчитывается по последнему сохранённому курсу.')+'</p><div><button class="btn primary">Сохранить</button></div></section></form>';
 }
 function vCredit(){
   const w=S.wallet,log=(w.debtLog||[]).map(x=>({id:x.id,date:x.date,p:x.p,v:x.amount,note:x.note})).sort((a,b)=>a.date.localeCompare(b.date));
-  return '<section class="panel"><h3>Кредит</h3><div class="stats"><div class="stat"><b>'+fmt(w.debt)+' ₽</b><span>остаток по кредиту</span></div>'+
+  return '<section class="panel"><h3>Кредит</h3><div class="stats"><div class="stat"><b>'+fmt(log.length?log[log.length-1].v:w.debt)+' ₽</b><span>остаток по кредиту'+(log.length?', '+when(log[log.length-1]):'')+'</span></div>'+
     (log.length>1?'<div class="stat"><b>'+fmt(log[0].v-log[log.length-1].v)+' ₽</b><span>погашено с '+(log[0].p==='m'?MONG[parse(log[0].date).getMonth()]+' '+parse(log[0].date).getFullYear():log[0].p==='y'?parse(log[0].date).getFullYear()+' года':human(log[0].date))+'</span></div>':'')+'</div></section>'+
     (log.length>1?'<section class="panel">'+box('Остаток долга','₽',chart([{name:'Долг',color:'var(--accent)',pts:log}],{unit:'₽',left:62,right:66,label:'Остаток долга по датам'}))+
       '<div class="tbl"><table><tr><th>Дата</th><th>Остаток, ₽</th><th>Комментарий</th><th></th></tr>'+log.slice().reverse().map(x=>'<tr><td>'+when(x)+'</td><td>'+fmt(x.v)+'</td><td class="wrapc">'+esc(x.note||'')+'</td><td>'+del('debtlog',x.id)+'</td></tr>').join('')+'</table></div></section>':'')+
-    '<form data-form="wallet"><section class="panel"><h3>Изменить кредит</h3><div class="row">'+wf('debt','Остаток долга, ₽',w.debt)+wf('debtPay','Ежемесячный платёж, ₽',w.debtPay)+wf('debtDay','День платежа',w.debtDay,'1')+'</div><p class="small muted">Если указать платёж и день, он появится в календаре среди оплат. Когда остаток долга меняется, впишите новую сумму: она попадёт в историю и на график.</p><div><button class="btn primary">Сохранить</button></div></section></form>';
+    '<form data-form="debtlog"><section class="panel"><h3>Внести остаток долга</h3><div class="row"><label class="f">Дата<input type="date" id="dl-date" name="date" value="'+today()+'" required></label><label class="f">Остаток, ₽<input type="number" inputmode="decimal" step="0.01" min="0" id="dl-amount" name="amount" required></label><label class="f" style="flex-basis:180px">Комментарий<input type="text" id="dl-note" name="note" placeholder="Необязательно"></label></div><p class="small muted">Новая запись попадёт в историю и на график. Остаток и сумма «погашено» сверху пересчитаются сами.</p><div><button class="btn primary">Внести</button></div></section></form>';
 }
 function vPlan(){
   const y=+pm.slice(0,4),m=+pm.slice(5,7)-1,items=S.plan.items.filter(x=>x.date.slice(0,7)===pm).sort((a,b)=>a.date.localeCompare(b.date));
@@ -727,6 +736,7 @@ document.addEventListener('submit',e=>{
   if(k==='task'){if(!tx(d.title))return;S.tasks.items.push({id:uid(),date:sel,title:tx(d.title),time:d.time||'',cat:d.cat==='life'?'life':'work',done:false});commit('tasks');const i=$('#task-title');if(i)i.focus()}
   else if(k==='date'){if(!tx(d.title))return;S.dates.items.push({id:uid(),date:sel,title:tx(d.title),yearly:!!d.yearly});commit('dates')}
   else if(k==='cyclenote'){setCycle(c=>{c.note=tx(d.note)})}
+  else if(k==='debtlog'){const v=numv(d.amount);if(!d.date||v==null)return;const lg=S.wallet.debtLog=S.wallet.debtLog||[],same=lg.find(x=>x.date===d.date&&!x.p);if(same){same.amount=v;same.note=tx(d.note)}else lg.push({id:uid(),date:d.date,amount:v,note:tx(d.note)});const last=lg.slice().sort((a,b)=>a.date.localeCompare(b.date)).pop();S.wallet.debt=last?last.amount:v;commit('wallet')}
   else if(k==='planin'){const v=numv(d.amount);if(!d.date||v==null)return;S.plan.items.push({id:uid(),date:d.date,amount:v,title:tx(d.title),out:[]});pm=d.date.slice(0,7);commit('plan')}
   else if(k==='planout'){const x=S.plan.items.find(q=>q.id===f.dataset.id),v=numv(d.amount);if(!x||v==null||!tx(d.title))return;(x.out=x.out||[]).push({id:uid(),amount:v,title:tx(d.title)});commit('plan')}
   else if(k==='mood'){const c=x=>Math.max(0,Math.min(10,Math.round(numv(d[x])||0)));S.mood.days[sel]={a:c('a'),f:c('f'),s:c('s')};if(tx(d.note))S.mood.days[sel].note=tx(d.note);commit('mood')}
