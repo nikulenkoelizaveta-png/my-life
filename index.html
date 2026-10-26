@@ -200,6 +200,20 @@ details[open]>summary.gsum::after{content:"▴"}
 .tools .muted{width:100%;text-align:center}
 .login{max-width:420px;margin:0 auto;width:100%}
 .stats.three b{font-size:18px;white-space:nowrap}
+.pgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;align-items:start}
+.pcol{background:var(--tile);border-radius:16px;padding:10px 8px;display:flex;flex-direction:column;gap:3px;min-width:0;font-size:13px;line-height:1.3}
+.pcol h4{margin:0 0 4px;font:600 14px var(--display)}
+.pcol .pin{font-weight:600;margin-top:6px;overflow-wrap:break-word;hyphens:auto}
+.pcol .pin:first-of-type{margin-top:0}
+.pcol .pout{overflow-wrap:break-word;hyphens:auto}
+.pcol .ln{display:flex;gap:2px;align-items:flex-start;min-width:0}
+.pcol .ln span{flex:1;min-width:0}
+.pcol .x{background:none;border:0;color:var(--muted);padding:0 2px;font-size:14px;line-height:1.2;cursor:pointer;flex:none}
+.pcol .tot{border-top:1px solid var(--line);margin-top:8px;padding-top:6px;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.pcol .tot b{color:var(--ink);font-weight:600}
+.pcol .add{margin-top:8px;align-self:stretch;padding:6px 0}
+.pcol.on{outline:2px solid var(--accent);outline-offset:-2px}
+@media (min-width:721px){.pcol{font-size:14px;padding:14px}.pcol h4{font-size:16px}}
 .seg{display:flex;gap:4px;background:var(--glass);border:1px solid var(--glass-line);border-radius:999px;padding:4px}
 .seg button{flex:1 1 0;min-width:0;background:none;border:0;border-radius:999px;padding:9px 6px;font:400 14px/1.2 var(--body);cursor:pointer;color:var(--ink)}
 .seg button[aria-pressed="true"]{background:var(--pill);color:var(--pill-ink)}
@@ -269,7 +283,7 @@ let sel=today(); let cur=[parse(sel).getFullYear(),parse(sel).getMonth()];
 const CALT=[['all','Все записи'],['task','Задачи'],['date','Праздники и даты'],['pay','Оплаты']];
 let calType=ls.get('lp:caltype','all');if(!CALT.some(c=>c[0]===calType))calType='all';
 const layers={has:k=>k!=='cycle'&&(calType==='all'||calType===k)};
-let ftab=ls.get('lp:ftab','save'),pm=today().slice(0,7),editH=false,selGoal=null,wk=null,V=[],vcol=null;const openG=new Set();
+let ftab=ls.get('lp:ftab','plan'),pm=today().slice(0,7),addM=null,addT='in',editH=false,selGoal=null,wk=null,V=[],vcol=null;const openG=new Set();
 let CS=null;
 const writing={},dirty={};
 
@@ -544,7 +558,7 @@ async function loadRates(){
 }
 const wf=(id,l,v,step)=>'<label class="f">'+l+'<input type="number" inputmode="decimal" step="'+(step||'0.01')+'" min="0" id="w-'+id+'" name="'+id+'" value="'+(v||'')+'" placeholder="0"></label>';
 function vMoney(){
-  const T=[['save','Накопление'],['credit','Кредит'],['plan','Финансовый план']];if(!T.some(t=>t[0]===ftab))ftab='save';
+  const T=[['plan','Финансовый план'],['save','Накопление'],['credit','Кредит']];if(!T.some(t=>t[0]===ftab))ftab='plan';
   return '<div class="seg" role="group" aria-label="Раздел финансов">'+T.map(t=>'<button type="button" data-act="ftab" data-k="'+t[0]+'" aria-pressed="'+(t[0]===ftab)+'">'+t[1]+'</button>').join('')+'</div>'+
     ({save:vSave,credit:vCredit,plan:vPlan}[ftab])();
 }
@@ -566,17 +580,24 @@ function vCredit(){
     '<form data-form="debtlog"><section class="panel"><h3>Внести остаток долга</h3><div class="row"><label class="f">Дата<input type="date" id="dl-date" name="date" value="'+today()+'" required></label><label class="f">Остаток, ₽<input type="number" inputmode="decimal" step="0.01" min="0" id="dl-amount" name="amount" required></label><label class="f" style="flex-basis:180px">Комментарий<input type="text" id="dl-note" name="note" placeholder="Необязательно"></label></div><p class="small muted">Новая запись попадёт в историю и на график. Остаток и сумма «погашено» сверху пересчитаются сами.</p><div><button class="btn primary">Внести</button></div></section></form>';
 }
 function vPlan(){
-  const y=+pm.slice(0,4),m=+pm.slice(5,7)-1,items=S.plan.items.filter(x=>x.date.slice(0,7)===pm).sort((a,b)=>a.date.localeCompare(b.date));
-  const sum=a=>a.reduce((t,x)=>t+(+x.amount||0),0),inc=sum(items),out=items.reduce((t,x)=>t+sum(x.out||[]),0),free=inc-out;
-  const card=x=>{const o=x.out||[],f=(+x.amount||0)-sum(o),d=parse(x.date);
-    return '<div class="inc"><div class="hd"><b>'+d.getDate()+' '+MONG[d.getMonth()]+' · '+fmt(x.amount)+' ₽</b>'+del('plan',x.id)+'</div>'+(x.title?'<span class="small muted">'+esc(x.title)+'</span>':'')+
-      o.map(z=>'<div class="out"><span class="num">'+fmt(z.amount)+' ₽</span><span class="t">'+esc(z.title)+'</span><button type="button" class="btn ghost small" data-act="delout" data-id="'+x.id+'" data-o="'+z.id+'">Удалить</button></div>').join('')+
-      '<span class="free'+(f<0?' over':'')+'">'+(f<0?'Распределено больше, чем приходит, на '+fmt(-f)+' ₽':'Не распределено: '+fmt(f)+' ₽')+'</span>'+
-      '<details><summary>+ добавить трату</summary><form data-form="planout" data-id="'+x.id+'" class="row" style="padding-top:8px"><label class="f" style="flex:0 1 110px">Сумма, ₽<input type="number" inputmode="decimal" step="0.01" min="0" id="po-a-'+x.id+'" name="amount" required></label><label class="f" style="flex-basis:160px">На что<input type="text" id="po-t-'+x.id+'" name="title" placeholder="Коммуналка" required></label><button class="btn primary">Добавить</button></form></details></div>'};
-  return '<section class="panel"><div class="calhead"><h2>'+MON[m]+' '+y+'</h2><div class="row"><button type="button" class="btn round" data-act="pmprev" aria-label="Предыдущий месяц">←</button><button type="button" class="btn" data-act="pmnow">Этот месяц</button><button type="button" class="btn round" data-act="pmnext" aria-label="Следующий месяц">→</button></div></div>'+
-    '<div class="stats three" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div class="stat"><b>'+fmt(inc)+'</b><span>придёт, ₽</span></div><div class="stat"><b>'+fmt(out)+'</b><span>распределено, ₽</span></div><div class="stat"><b class="'+(free<0?'over':'')+'">'+fmt(free)+'</b><span>свободно, ₽</span></div></div>'+
-    (items.length?items.map(card).join(''):'<p class="empty">На '+MON[m].toLowerCase()+' поступлений не запланировано.</p>')+'</section>'+
-    '<section class="panel"><form data-form="planin" class="sec"><h3>Новое поступление</h3><div class="row"><label class="f">Дата<input type="date" id="pi-date" name="date" value="'+(pm===today().slice(0,7)?today():pm+'-01')+'" required></label><label class="f">Сумма, ₽<input type="number" inputmode="decimal" step="0.01" min="0" id="pi-amount" name="amount" required></label><label class="f" style="flex-basis:160px">Откуда<input type="text" id="pi-title" name="title" placeholder="Необязательно"></label></div><div><button class="btn primary">Добавить</button></div><p class="small muted">После добавления под поступлением можно расписать, на что пойдут деньги.</p></form></section>';
+  const ms=[0,1,2].map(k=>{const d=new Date(+pm.slice(0,4),+pm.slice(5,7)-1+k,1);return dIso(d).slice(0,7)});
+  const sum=a=>a.reduce((t,x)=>t+(+x.amount||0),0);
+  const ttl=ms.map(m=>{const a=MON[+m.slice(5,7)-1];return a+(m.slice(0,4)!==today().slice(0,4)?' '+m.slice(0,4):'')});
+  const col=(m,k)=>{const it=S.plan.items.filter(x=>x.date.slice(0,7)===m).sort((a,b)=>a.date.localeCompare(b.date)),inc=sum(it),out=it.reduce((t,x)=>t+sum(x.out||[]),0);
+    return '<div class="pcol'+(addM===m?' on':'')+'"><h4>'+ttl[k]+'</h4>'+
+      it.map(x=>{const d=parse(x.date);return '<div class="ln pin"><span>'+d.getDate()+' '+MONG[d.getMonth()]+' ('+fmt(x.amount)+')'+(x.title?' '+esc(x.title):'')+'</span><button type="button" class="x" data-act="delin" data-id="'+x.id+'" aria-label="Удалить поступление">×</button></div>'+
+        (x.out||[]).map(z=>'<div class="ln pout"><span>'+fmt(z.amount)+' '+esc(z.title)+'</span><button type="button" class="x" data-act="delout" data-id="'+x.id+'" data-o="'+z.id+'" aria-label="Удалить трату">×</button></div>').join('')}).join('')+
+      (it.length?'<div class="tot">придёт <b>'+fmt(inc)+'</b><br>траты <b>'+fmt(out)+'</b><br>остаток <b class="'+(inc-out<0?'over':'')+'">'+fmt(inc-out)+'</b></div>':'<span class="muted small">пусто</span>')+
+      '<button type="button" class="btn small add" data-act="padd" data-m="'+m+'">+</button></div>'};
+  let form='';
+  if(addM){const it=S.plan.items.filter(x=>x.date.slice(0,7)===addM).sort((a,b)=>a.date.localeCompare(b.date)),mn=MON[+addM.slice(5,7)-1].toLowerCase();
+    form='<section class="panel"><div class="phead"><h3>Добавить в '+mn+'</h3><button type="button" class="btn ghost small" data-act="pclose">Закрыть</button></div>'+
+      '<div class="seg" role="group"><button type="button" data-act="ptype" data-k="in" aria-pressed="'+(addT==='in')+'">Придёт</button><button type="button" data-act="ptype" data-k="out" aria-pressed="'+(addT==='out')+'">Потрачу</button></div>'+
+      (addT==='in'?'<form data-form="planin" class="sec"><div class="row"><label class="f">Дата<input type="date" id="pi-date" name="date" value="'+(addM===today().slice(0,7)?today():addM+'-01')+'" required></label><label class="f">Сколько, ₽<input type="number" inputmode="decimal" step="0.01" min="0" id="pi-amount" name="amount" required></label><label class="f" style="flex-basis:160px">Откуда<input type="text" id="pi-title" name="title" placeholder="Необязательно"></label></div><div><button class="btn primary">Добавить</button></div></form>'
+       :(it.length?'<form data-form="planout" class="sec"><div class="row"><label class="f">Сколько, ₽<input type="number" inputmode="decimal" step="0.01" min="0" id="po-amount" name="amount" required></label><label class="f" style="flex-basis:160px">На что<input type="text" id="po-title" name="title" required></label><label class="f" style="flex-basis:170px">Из какого поступления<select id="po-in" name="inc">'+it.map((x,i)=>{const d=parse(x.date);return '<option value="'+x.id+'"'+(i===it.length-1?' selected':'')+'>'+d.getDate()+' '+MONG[d.getMonth()]+' ('+fmt(x.amount)+')</option>'}).join('')+'</select></label></div><div><button class="btn primary">Добавить</button></div></form>'
+       :'<p class="empty">Сначала добавьте в этот месяц поступление: траты записываются под ним.</p>'))+'</section>'}
+  return '<section class="panel"><div class="calhead"><h2>'+ttl[0]+' – '+ttl[2]+'</h2><div class="row"><button type="button" class="btn round" data-act="pmprev" aria-label="Предыдущие три месяца">←</button><button type="button" class="btn" data-act="pmnow">Сейчас</button><button type="button" class="btn round" data-act="pmnext" aria-label="Следующие три месяца">→</button></div></div>'+
+    '<div class="pgrid">'+ms.map(col).join('')+'</div><p class="small muted">Нажмите «+» под месяцем, чтобы записать, что придёт или на что потратите. «×» удаляет строку.</p></section>'+form;
 }
 function nice(x){const p=Math.pow(10,Math.floor(Math.log10(x))),f=x/p;return (f<=1?1:f<=2?2:f<=5?5:10)*p}
 function chart(series,o){
@@ -688,8 +709,12 @@ document.addEventListener('click',e=>{
   else if(a==='today'){sel=today();const d=parse(sel);cur=[d.getFullYear(),d.getMonth()];render()}
   else if(a==='pick'){sel=b.dataset.d;const d=parse(sel);cur=[d.getFullYear(),d.getMonth()];render()}
   else if(a==='ftab'){ftab=b.dataset.k;ls.set('lp:ftab',ftab);render()}
-  else if(a==='pmprev'||a==='pmnext'){const d=new Date(+pm.slice(0,4),+pm.slice(5,7)-1+(a==='pmnext'?1:-1),1);pm=dIso(d).slice(0,7);render()}
-  else if(a==='pmnow'){pm=today().slice(0,7);render()}
+  else if(a==='pmprev'||a==='pmnext'){const d=new Date(+pm.slice(0,4),+pm.slice(5,7)-1+(a==='pmnext'?3:-3),1);pm=dIso(d).slice(0,7);addM=null;render()}
+  else if(a==='pmnow'){pm=today().slice(0,7);addM=null;render()}
+  else if(a==='padd'){addM=b.dataset.m;render();const f=document.querySelector('form[data-form=planin] input[name=amount],form[data-form=planout] input[name=amount]');if(f){f.scrollIntoView({block:'center'});f.focus()}}
+  else if(a==='pclose'){addM=null;render()}
+  else if(a==='ptype'){addT=b.dataset.k;render()}
+  else if(a==='delin'){if(armed!==b){if(armed&&armed.isConnected)armed.textContent='×';armed=b;b.textContent='удалить?';setTimeout(()=>{if(armed===b){armed=null;if(b.isConnected)b.textContent='×'}},3500);return}armed=null;S.plan.items=S.plan.items.filter(x=>x.id!==b.dataset.id);commit('plan')}
   else if(a==='delout'){const x=S.plan.items.find(q=>q.id===b.dataset.id);if(x){x.out=(x.out||[]).filter(z=>z.id!==b.dataset.o);commit('plan')}}
   else if(a==='edith'){editH=!editH;render()}
   else if(a==='wprev'||a==='wnext'){wk=addDays(wk,a==='wnext'?7:-7);render()}
@@ -737,8 +762,8 @@ document.addEventListener('submit',e=>{
   else if(k==='date'){if(!tx(d.title))return;S.dates.items.push({id:uid(),date:sel,title:tx(d.title),yearly:!!d.yearly});commit('dates')}
   else if(k==='cyclenote'){setCycle(c=>{c.note=tx(d.note)})}
   else if(k==='debtlog'){const v=numv(d.amount);if(!d.date||v==null)return;const lg=S.wallet.debtLog=S.wallet.debtLog||[],same=lg.find(x=>x.date===d.date&&!x.p);if(same){same.amount=v;same.note=tx(d.note)}else lg.push({id:uid(),date:d.date,amount:v,note:tx(d.note)});const last=lg.slice().sort((a,b)=>a.date.localeCompare(b.date)).pop();S.wallet.debt=last?last.amount:v;commit('wallet')}
-  else if(k==='planin'){const v=numv(d.amount);if(!d.date||v==null)return;S.plan.items.push({id:uid(),date:d.date,amount:v,title:tx(d.title),out:[]});pm=d.date.slice(0,7);commit('plan')}
-  else if(k==='planout'){const x=S.plan.items.find(q=>q.id===f.dataset.id),v=numv(d.amount);if(!x||v==null||!tx(d.title))return;(x.out=x.out||[]).push({id:uid(),amount:v,title:tx(d.title)});commit('plan')}
+  else if(k==='planin'){const v=numv(d.amount);if(!d.date||v==null)return;S.plan.items.push({id:uid(),date:d.date,amount:v,title:tx(d.title),out:[]});addM=d.date.slice(0,7);commit('plan');const n=$('#pi-amount');if(n)n.focus()}
+  else if(k==='planout'){const x=S.plan.items.find(q=>q.id===(d.inc||f.dataset.id)),v=numv(d.amount);if(!x||v==null||!tx(d.title))return;(x.out=x.out||[]).push({id:uid(),amount:v,title:tx(d.title)});commit('plan');const n=$('#po-amount');if(n)n.focus()}
   else if(k==='mood'){const c=x=>Math.max(0,Math.min(10,Math.round(numv(d[x])||0)));S.mood.days[sel]={a:c('a'),f:c('f'),s:c('s')};if(tx(d.note))S.mood.days[sel].note=tx(d.note);commit('mood')}
   else if(k==='sleep'){if(!d.date||!d.bed||!d.wake)return;const n={bed:d.bed,wake:d.wake,wakes:Math.max(0,Math.round(numv(d.wakes)||0))};if(d.feel)n.feel=+d.feel;S.sleep.nights[d.date]=n;commit('sleep')}
   else if(k==='inbox'){if(!tx(d.text))return;S.inbox.items.push({id:uid(),text:tx(d.text),kind:d.kind==='idea'?'idea':'task',created:today()});commit('inbox');const i=$('#in-text');if(i)i.focus()}
