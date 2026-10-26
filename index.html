@@ -199,6 +199,18 @@ details[open]>summary.gsum::after{content:"▴"}
 .tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center;padding-top:6px}
 .tools .muted{width:100%;text-align:center}
 .login{max-width:420px;margin:0 auto;width:100%}
+.stats.three b{font-size:18px;white-space:nowrap}
+.seg{display:flex;gap:4px;background:var(--glass);border:1px solid var(--glass-line);border-radius:999px;padding:4px}
+.seg button{flex:1 1 0;min-width:0;background:none;border:0;border-radius:999px;padding:9px 6px;font:400 14px/1.2 var(--body);cursor:pointer;color:var(--ink)}
+.seg button[aria-pressed="true"]{background:var(--pill);color:var(--pill-ink)}
+.inc{background:var(--tile);border-radius:20px;padding:14px 16px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.inc .hd{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.inc .hd b{font:600 17px var(--display);font-variant-numeric:tabular-nums}
+.inc .out{display:flex;gap:10px;align-items:center;font-size:14px;min-width:0}
+.inc .out .t{flex:1;min-width:0;overflow-wrap:anywhere}
+.inc .free{font-size:13px;color:var(--muted)}
+.inc details summary{font-size:13px;color:var(--accent);list-style:none}
+.inc details summary::-webkit-details-marker{display:none}
 #tip{position:fixed;z-index:10;pointer-events:none;background:var(--pill);color:var(--pill-ink);font-size:12px;padding:6px 10px;border-radius:12px;max-width:240px}
 </style>
 
@@ -224,11 +236,11 @@ const WDF=['Воскресенье','Понедельник','Вторник','�
 const SYM=['Боль внизу живота','Головная боль','Боль в спине','Грудь','Усталость','Перепады настроения','Отёки','Тошнота'];
 const FLOW=['Нет','Скудные','Средние','Обильные'];
 const LABS=['Ферритин','Витамин D','ТТГ','Гемоглобин','Железо','Витамин B12','Эстрадиол','Прогестерон','Пролактин','Тестостерон','Кортизол','Глюкоза','Инсулин'];
-const KEYS=['mood','sleep','inbox','goals','tasks','dates','payments','cycle','english','wallet','health','home'];
-const DEF={mood:{days:{}},sleep:{nights:{}},inbox:{items:[]},goals:{items:[]},tasks:{items:[]},dates:{items:[]},payments:{items:[]},cycle:{days:{}},english:{days:{},notes:[],hw:[]},
+const KEYS=['plan','mood','sleep','inbox','goals','tasks','dates','payments','cycle','english','wallet','health','home'];
+const DEF={plan:{items:[]},mood:{days:{}},sleep:{nights:{}},inbox:{items:[]},goals:{items:[]},tasks:{items:[]},dates:{items:[]},payments:{items:[]},cycle:{days:{}},english:{days:{},notes:[],hw:[]},
   wallet:{rub:0,usd:0,eur:0,cny:0,rUsd:0,rEur:0,rCny:0,debt:0,debtPay:0,debtDay:0,debtPaid:{},debtLog:[],gRub:0,gUsd:0,gEur:0,gCny:0},
   health:{height:'',measures:[],labs:[]},home:{notes:'',meters:[]}};
-const LISTS={tasks:['tasks','items'],dates:['dates','items'],payments:['payments','items'],notes:['english','notes'],measures:['health','measures'],labs:['health','labs'],meters:['home','meters'],debtlog:['wallet','debtLog'],hw:['english','hw'],goals:['goals','items'],inbox:['inbox','items']};
+const LISTS={tasks:['tasks','items'],dates:['dates','items'],payments:['payments','items'],notes:['english','notes'],measures:['health','measures'],labs:['health','labs'],meters:['home','meters'],debtlog:['wallet','debtLog'],hw:['english','hw'],goals:['goals','items'],inbox:['inbox','items'],plan:['plan','items']};
 
 const $=(s,r)=>(r||document).querySelector(s);
 const clone=o=>JSON.parse(JSON.stringify(o));
@@ -257,7 +269,7 @@ let sel=today(); let cur=[parse(sel).getFullYear(),parse(sel).getMonth()];
 const CALT=[['all','Все записи'],['task','Задачи'],['date','Праздники и даты'],['pay','Оплаты']];
 let calType=ls.get('lp:caltype','all');if(!CALT.some(c=>c[0]===calType))calType='all';
 const layers={has:k=>k!=='cycle'&&(calType==='all'||calType===k)};
-let editH=false,selGoal=null,wk=null,V=[],vcol=null;const openG=new Set();
+let ftab=ls.get('lp:ftab','save'),pm=today().slice(0,7),editH=false,selGoal=null,wk=null,V=[],vcol=null;const openG=new Set();
 let CS=null;
 const writing={},dirty={};
 
@@ -521,20 +533,41 @@ function goalPanel(w){
   return '<section class="panel"><h3>Цель по накоплениям</h3><div class="stats"><div class="stat"><b>'+fmt(Math.max(0,Math.round(tot-have)))+' ₽</b><span>осталось до цели</span></div><div class="stat"><b>'+tp+'%</b><span>накоплено из '+fmt(tot)+' ₽</span></div></div>'+
     '<div class="goalrow"><div class="hd"><span>Вся цель</span><b>'+tp+'%</b></div><div class="meter" style="height:16px" role="img" aria-label="Вся цель: '+tp+'%"><i style="width:'+tp+'%"></i></div></div>'+rows+'</section>';
 }
+const wf=(id,l,v,step)=>'<label class="f">'+l+'<input type="number" inputmode="decimal" step="'+(step||'0.01')+'" min="0" id="w-'+id+'" name="'+id+'" value="'+(v||'')+'" placeholder="0"></label>';
 function vMoney(){
-  const w=S.wallet,log=(w.debtLog||[]).map(x=>({id:x.id,date:x.date,p:x.p,v:x.amount,note:x.note})).sort((a,b)=>a.date.localeCompare(b.date));
-  const f=(id,l,v,step)=>'<label class="f">'+l+'<input type="number" inputmode="decimal" step="'+(step||'0.01')+'" min="0" id="w-'+id+'" name="'+id+'" value="'+(v||'')+'" placeholder="0"></label>';
+  const T=[['save','Накопление'],['credit','Кредит'],['plan','Финансовый план']];if(!T.some(t=>t[0]===ftab))ftab='save';
+  return '<div class="seg" role="group" aria-label="Раздел финансов">'+T.map(t=>'<button type="button" data-act="ftab" data-k="'+t[0]+'" aria-pressed="'+(t[0]===ftab)+'">'+t[1]+'</button>').join('')+'</div>'+
+    ({save:vSave,credit:vCredit,plan:vPlan}[ftab])();
+}
+function vSave(){
+  const w=S.wallet;
   return '<section class="panel"><h3>Накопления</h3><div class="stats">'+
-    '<div class="stat"><b>'+fmt(w.rub)+' ₽</b><span>рубли</span></div><div class="stat"><b>'+fmt(w.usd)+' $</b><span>доллары</span></div><div class="stat"><b>'+fmt(w.eur)+' €</b><span>евро</span></div><div class="stat"><b>'+fmt(w.cny)+' ¥</b><span>юани</span></div></div>'+
-    '<h3>Кредит</h3><div class="stats"><div class="stat"><b>'+fmt(w.debt)+' ₽</b><span>остаток по кредиту</span></div>'+
-    (log.length>1?'<div class="stat"><b>'+fmt(log[0].v-log[log.length-1].v)+' ₽</b><span>погашено с '+(log[0].p==='m'?MONG[parse(log[0].date).getMonth()]+' '+parse(log[0].date).getFullYear():log[0].p==='y'?parse(log[0].date).getFullYear()+' года':human(log[0].date))+'</span></div>':'')+'</div></section>'+
+    '<div class="stat"><b>'+fmt(w.rub)+' ₽</b><span>рубли</span></div><div class="stat"><b>'+fmt(w.usd)+' $</b><span>доллары</span></div><div class="stat"><b>'+fmt(w.eur)+' €</b><span>евро</span></div><div class="stat"><b>'+fmt(w.cny)+' ¥</b><span>юани</span></div></div></section>'+
     goalPanel(w)+
+    '<form data-form="wallet"><section class="panel"><h3>Изменить накопления</h3><div class="row">'+wf('rub','Рубли',w.rub)+wf('usd','Доллары',w.usd)+wf('eur','Евро',w.eur)+wf('cny','Юани',w.cny)+'</div>'+
+    '<h3>Цель, в рублях</h3><div class="row">'+wf('gRub','В рублях',w.gRub)+wf('gUsd','В долларах',w.gUsd)+wf('gEur','В евро',w.gEur)+wf('gCny','В юанях',w.gCny)+'</div>'+
+    '<h3>Курс для пересчёта цели</h3><div class="row">'+wf('rUsd','1 $ в ₽',w.rUsd)+wf('rEur','1 € в ₽',w.rEur)+wf('rCny','1 ¥ в ₽',w.rCny)+'</div><p class="small muted">Цель задана в рублях, поэтому количество валюты зависит от курса. Обновляйте курс, когда он заметно меняется.</p><div><button class="btn primary">Сохранить</button></div></section></form>';
+}
+function vCredit(){
+  const w=S.wallet,log=(w.debtLog||[]).map(x=>({id:x.id,date:x.date,p:x.p,v:x.amount,note:x.note})).sort((a,b)=>a.date.localeCompare(b.date));
+  return '<section class="panel"><h3>Кредит</h3><div class="stats"><div class="stat"><b>'+fmt(w.debt)+' ₽</b><span>остаток по кредиту</span></div>'+
+    (log.length>1?'<div class="stat"><b>'+fmt(log[0].v-log[log.length-1].v)+' ₽</b><span>погашено с '+(log[0].p==='m'?MONG[parse(log[0].date).getMonth()]+' '+parse(log[0].date).getFullYear():log[0].p==='y'?parse(log[0].date).getFullYear()+' года':human(log[0].date))+'</span></div>':'')+'</div></section>'+
     (log.length>1?'<section class="panel">'+box('Остаток долга','₽',chart([{name:'Долг',color:'var(--accent)',pts:log}],{unit:'₽',left:62,right:66,label:'Остаток долга по датам'}))+
       '<div class="tbl"><table><tr><th>Дата</th><th>Остаток, ₽</th><th>Комментарий</th><th></th></tr>'+log.slice().reverse().map(x=>'<tr><td>'+when(x)+'</td><td>'+fmt(x.v)+'</td><td class="wrapc">'+esc(x.note||'')+'</td><td>'+del('debtlog',x.id)+'</td></tr>').join('')+'</table></div></section>':'')+
-    '<form data-form="wallet" class="cols"><section class="panel"><h3>Изменить накопления</h3><div class="row">'+f('rub','Рубли',w.rub)+f('usd','Доллары',w.usd)+f('eur','Евро',w.eur)+f('cny','Юани',w.cny)+'</div>'+
-    '<h3>Цель, в рублях</h3><div class="row">'+f('gRub','В рублях',w.gRub)+f('gUsd','В долларах',w.gUsd)+f('gEur','В евро',w.gEur)+f('gCny','В юанях',w.gCny)+'</div>'+
-    '<h3>Курс для пересчёта цели</h3><div class="row">'+f('rUsd','1 $ в ₽',w.rUsd)+f('rEur','1 € в ₽',w.rEur)+f('rCny','1 ¥ в ₽',w.rCny)+'</div><p class="small muted">Цель задана в рублях, поэтому количество валюты зависит от курса. Обновляйте курс, когда он заметно меняется.</p></section>'+
-    '<section class="panel"><h3>Изменить кредит</h3><div class="row">'+f('debt','Остаток долга, ₽',w.debt)+f('debtPay','Ежемесячный платёж, ₽',w.debtPay)+f('debtDay','День платежа',w.debtDay,'1')+'</div><p class="small muted">Если указать платёж и день, он появится в календаре среди оплат. Когда остаток долга меняется, впишите новую сумму: она попадёт в историю и на график.</p><div><button class="btn primary">Сохранить</button></div></section></form>';
+    '<form data-form="wallet"><section class="panel"><h3>Изменить кредит</h3><div class="row">'+wf('debt','Остаток долга, ₽',w.debt)+wf('debtPay','Ежемесячный платёж, ₽',w.debtPay)+wf('debtDay','День платежа',w.debtDay,'1')+'</div><p class="small muted">Если указать платёж и день, он появится в календаре среди оплат. Когда остаток долга меняется, впишите новую сумму: она попадёт в историю и на график.</p><div><button class="btn primary">Сохранить</button></div></section></form>';
+}
+function vPlan(){
+  const y=+pm.slice(0,4),m=+pm.slice(5,7)-1,items=S.plan.items.filter(x=>x.date.slice(0,7)===pm).sort((a,b)=>a.date.localeCompare(b.date));
+  const sum=a=>a.reduce((t,x)=>t+(+x.amount||0),0),inc=sum(items),out=items.reduce((t,x)=>t+sum(x.out||[]),0),free=inc-out;
+  const card=x=>{const o=x.out||[],f=(+x.amount||0)-sum(o),d=parse(x.date);
+    return '<div class="inc"><div class="hd"><b>'+d.getDate()+' '+MONG[d.getMonth()]+' · '+fmt(x.amount)+' ₽</b>'+del('plan',x.id)+'</div>'+(x.title?'<span class="small muted">'+esc(x.title)+'</span>':'')+
+      o.map(z=>'<div class="out"><span class="num">'+fmt(z.amount)+' ₽</span><span class="t">'+esc(z.title)+'</span><button type="button" class="btn ghost small" data-act="delout" data-id="'+x.id+'" data-o="'+z.id+'">Удалить</button></div>').join('')+
+      '<span class="free'+(f<0?' over':'')+'">'+(f<0?'Распределено больше, чем приходит, на '+fmt(-f)+' ₽':'Не распределено: '+fmt(f)+' ₽')+'</span>'+
+      '<details><summary>+ добавить трату</summary><form data-form="planout" data-id="'+x.id+'" class="row" style="padding-top:8px"><label class="f" style="flex:0 1 110px">Сумма, ₽<input type="number" inputmode="decimal" step="0.01" min="0" id="po-a-'+x.id+'" name="amount" required></label><label class="f" style="flex-basis:160px">На что<input type="text" id="po-t-'+x.id+'" name="title" placeholder="Коммуналка" required></label><button class="btn primary">Добавить</button></form></details></div>'};
+  return '<section class="panel"><div class="calhead"><h2>'+MON[m]+' '+y+'</h2><div class="row"><button type="button" class="btn round" data-act="pmprev" aria-label="Предыдущий месяц">←</button><button type="button" class="btn" data-act="pmnow">Этот месяц</button><button type="button" class="btn round" data-act="pmnext" aria-label="Следующий месяц">→</button></div></div>'+
+    '<div class="stats three" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div class="stat"><b>'+fmt(inc)+'</b><span>придёт, ₽</span></div><div class="stat"><b>'+fmt(out)+'</b><span>распределено, ₽</span></div><div class="stat"><b class="'+(free<0?'over':'')+'">'+fmt(free)+'</b><span>свободно, ₽</span></div></div>'+
+    (items.length?items.map(card).join(''):'<p class="empty">На '+MON[m].toLowerCase()+' поступлений не запланировано.</p>')+'</section>'+
+    '<section class="panel"><form data-form="planin" class="sec"><h3>Новое поступление</h3><div class="row"><label class="f">Дата<input type="date" id="pi-date" name="date" value="'+(pm===today().slice(0,7)?today():pm+'-01')+'" required></label><label class="f">Сумма, ₽<input type="number" inputmode="decimal" step="0.01" min="0" id="pi-amount" name="amount" required></label><label class="f" style="flex-basis:160px">Откуда<input type="text" id="pi-title" name="title" placeholder="Необязательно"></label></div><div><button class="btn primary">Добавить</button></div><p class="small muted">После добавления под поступлением можно расписать, на что пойдут деньги.</p></form></section>';
 }
 function nice(x){const p=Math.pow(10,Math.floor(Math.log10(x))),f=x/p;return (f<=1?1:f<=2?2:f<=5?5:10)*p}
 function chart(series,o){
@@ -645,6 +678,10 @@ document.addEventListener('click',e=>{
   if(a==='prev'||a==='next'){const d=new Date(cur[0],cur[1]+(a==='next'?1:-1),1);cur=[d.getFullYear(),d.getMonth()];render()}
   else if(a==='today'){sel=today();const d=parse(sel);cur=[d.getFullYear(),d.getMonth()];render()}
   else if(a==='pick'){sel=b.dataset.d;const d=parse(sel);cur=[d.getFullYear(),d.getMonth()];render()}
+  else if(a==='ftab'){ftab=b.dataset.k;ls.set('lp:ftab',ftab);render()}
+  else if(a==='pmprev'||a==='pmnext'){const d=new Date(+pm.slice(0,4),+pm.slice(5,7)-1+(a==='pmnext'?1:-1),1);pm=dIso(d).slice(0,7);render()}
+  else if(a==='pmnow'){pm=today().slice(0,7);render()}
+  else if(a==='delout'){const x=S.plan.items.find(q=>q.id===b.dataset.id);if(x){x.out=(x.out||[]).filter(z=>z.id!==b.dataset.o);commit('plan')}}
   else if(a==='edith'){editH=!editH;render()}
   else if(a==='wprev'||a==='wnext'){wk=addDays(wk,a==='wnext'?7:-7);render()}
   else if(a==='wnow'){wk=null;render()}
@@ -690,6 +727,8 @@ document.addEventListener('submit',e=>{
   if(k==='task'){if(!tx(d.title))return;S.tasks.items.push({id:uid(),date:sel,title:tx(d.title),time:d.time||'',cat:d.cat==='life'?'life':'work',done:false});commit('tasks');const i=$('#task-title');if(i)i.focus()}
   else if(k==='date'){if(!tx(d.title))return;S.dates.items.push({id:uid(),date:sel,title:tx(d.title),yearly:!!d.yearly});commit('dates')}
   else if(k==='cyclenote'){setCycle(c=>{c.note=tx(d.note)})}
+  else if(k==='planin'){const v=numv(d.amount);if(!d.date||v==null)return;S.plan.items.push({id:uid(),date:d.date,amount:v,title:tx(d.title),out:[]});pm=d.date.slice(0,7);commit('plan')}
+  else if(k==='planout'){const x=S.plan.items.find(q=>q.id===f.dataset.id),v=numv(d.amount);if(!x||v==null||!tx(d.title))return;(x.out=x.out||[]).push({id:uid(),amount:v,title:tx(d.title)});commit('plan')}
   else if(k==='mood'){const c=x=>Math.max(0,Math.min(10,Math.round(numv(d[x])||0)));S.mood.days[sel]={a:c('a'),f:c('f'),s:c('s')};if(tx(d.note))S.mood.days[sel].note=tx(d.note);commit('mood')}
   else if(k==='sleep'){if(!d.date||!d.bed||!d.wake)return;const n={bed:d.bed,wake:d.wake,wakes:Math.max(0,Math.round(numv(d.wakes)||0))};if(d.feel)n.feel=+d.feel;S.sleep.nights[d.date]=n;commit('sleep')}
   else if(k==='inbox'){if(!tx(d.text))return;S.inbox.items.push({id:uid(),text:tx(d.text),kind:d.kind==='idea'?'idea':'task',created:today()});commit('inbox');const i=$('#in-text');if(i)i.focus()}
@@ -697,7 +736,7 @@ document.addEventListener('submit',e=>{
   else if(k==='step'){const g=S.goals.items.find(x=>x.id===f.dataset.g);if(!g||!tx(d.title))return;(g.steps=g.steps||[]).push({id:uid(),title:tx(d.title),due:d.due||'',done:false});openG.add(g.id);commit('goals');const i=$('#s-title-'+g.id);if(i)i.focus()}
   else if(k==='strategy'){const g=S.goals.items.find(x=>x.id===selGoal);if(!g)return;g.strategy=tx(d.strategy);commit('goals')}
   else if(k==='hw'){if(!tx(d.title)||!d.due)return;(S.english.hw=S.english.hw||[]).push({id:uid(),title:tx(d.title),due:d.due,done:false});commit('english')}
-  else if(k==='wallet'){['rub','usd','eur','cny','debt','debtPay','gRub','gUsd','gEur','gCny','rUsd','rEur','rCny'].forEach(x=>{S.wallet[x]=numv(d[x])||0});S.wallet.debtDay=Math.min(31,Math.max(0,Math.round(numv(d.debtDay)||0)));const lg=S.wallet.debtLog=S.wallet.debtLog||[],srt=lg.slice().sort((a,b)=>a.date.localeCompare(b.date)),lst=srt[srt.length-1];if(!lst||lst.amount!==S.wallet.debt){const td=lg.find(x=>x.date===today()&&!x.p);if(td)td.amount=S.wallet.debt;else lg.push({id:uid(),date:today(),amount:S.wallet.debt})}commit('wallet')}
+  else if(k==='wallet'){['rub','usd','eur','cny','debt','debtPay','gRub','gUsd','gEur','gCny','rUsd','rEur','rCny'].forEach(x=>{if(x in d)S.wallet[x]=numv(d[x])||0});if('debtDay' in d)S.wallet.debtDay=Math.min(31,Math.max(0,Math.round(numv(d.debtDay)||0)));if(!('debt' in d)){commit('wallet');return}const lg=S.wallet.debtLog=S.wallet.debtLog||[],srt=lg.slice().sort((a,b)=>a.date.localeCompare(b.date)),lst=srt[srt.length-1];if(!lst||lst.amount!==S.wallet.debt){const td=lg.find(x=>x.date===today()&&!x.p);if(td)td.amount=S.wallet.debt;else lg.push({id:uid(),date:today(),amount:S.wallet.debt})}commit('wallet')}
   else if(k==='measure'){const m={id:uid(),date:d.date||today()};let any=false;['weight','waist','hips','chest'].forEach(x=>{const v=numv(d[x]);if(v!=null){m[x]=v;any=true}});if(!any)return;S.health.measures.push(m);commit('health')}
   else if(k==='height'){S.health.height=numv(d.height)||'';commit('health')}
   else if(k==='lab'){const v=numv(d.value);if(v==null||!tx(d.name))return;S.health.labs.push({id:uid(),date:d.date||today(),name:tx(d.name),value:v,unit:tx(d.unit),ref:tx(d.ref)});commit('health')}
